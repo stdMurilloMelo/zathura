@@ -35,3 +35,10 @@ compile_commands.json
 *.log
 .ycm_extra_conf.py
 _*/
+
+# tests/tools: build artefacts of the manual probes
+tests/tools/selection-semantics
+tests/tools/gesture-propagation
+tests/tools/fixture.pdf
+tests/tools/probe.out
+tests/tools/probe.err
