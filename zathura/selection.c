@@ -1,0 +1,86 @@
+/* SPDX-License-Identifier: Zlib */
+
+#include <stdlib.h>
+#include <string.h>
+
+#include "selection.h"
+
+static zathura_selection_slice_t* slice_new(unsigned int page, double x1, double y1, double x2, double y2) {
+  zathura_selection_slice_t* slice = g_try_malloc0(sizeof(zathura_selection_slice_t));
+  if (slice == NULL) {
+    return NULL;
+  }
+
+  slice->page         = page;
+  slice->rectangle.x1 = x1;
+  slice->rectangle.y1 = y1;
+  slice->rectangle.x2 = x2;
+  slice->rectangle.y2 = y2;
+  return slice;
+}
+
+girara_list_t* zathura_selection_slice_range(const zathura_selection_t* selection, const zathura_page_extent_t* extents,
+                                             unsigned int n_extents) {
+  if (selection == NULL || extents == NULL || n_extents == 0) {
+    return NULL;
+  }
+  if (selection->origin.page >= n_extents || selection->cursor.page >= n_extents) {
+    return NULL;
+  }
+
+  girara_list_t* list = girara_list_new_with_free(g_free);
+  if (list == NULL) {
+    return NULL;
+  }
+
+  /* The cut follows the page order, so the anchor on the lower-indexed page
+   * opens the interval and the other one closes it, whatever the drag
+   * direction was. */
+  const zathura_selection_anchor_t* first = &selection->origin;
+  const zathura_selection_anchor_t* last  = &selection->cursor;
+  if (last->page < first->page) {
+    first = &selection->cursor;
+    last  = &selection->origin;
+  }
+
+  if (first->page == last->page) {
+    /* Single page. The rectangle is not a region to intersect: the plugin reads
+     * (x1,y1) as the start of the selection and (x2,y2) as its end, in reading
+     * order, so the two points are passed through as they came. Normalising
+     * them into a box would lose the direction of a diagonal drag. */
+    if (first->x == last->x && first->y == last->y) {
+      /* a click, not a drag: nothing is selected */
+      return list;
+    }
+
+    zathura_selection_slice_t* slice = slice_new(first->page, first->x, first->y, last->x, last->y);
+    if (slice != NULL) {
+      girara_list_append(list, slice);
+    }
+    return list;
+  }
+
+  for (unsigned int page = first->page; page <= last->page; page++) {
+    const double w = extents[page].width;
+    const double h = extents[page].height;
+
+    zathura_selection_slice_t* slice = NULL;
+    if (page == first->page) {
+      /* from the anchor itself down to the bottom of the page; starting at x=0
+       * would pull in the text to the left of the anchor on its own line */
+      slice = slice_new(page, first->x, first->y, w, h);
+    } else if (page == last->page) {
+      /* from the top of the page down to the anchor */
+      slice = slice_new(page, 0.0, 0.0, last->x, last->y);
+    } else {
+      /* the whole page */
+      slice = slice_new(page, 0.0, 0.0, w, h);
+    }
+
+    if (slice != NULL) {
+      girara_list_append(list, slice);
+    }
+  }
+
+  return list;
+}

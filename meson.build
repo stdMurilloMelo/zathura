@@ -145,6 +145,7 @@ sources = files(
   'zathura/plugin.c',
   'zathura/print.c',
   'zathura/render.c',
+  'zathura/selection.c',
   'zathura/shortcuts.c',
   'zathura/synctex.c',
   'zathura/types.c',
