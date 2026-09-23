@@ -1,0 +1,22 @@
+% Fixture for selection-semantics. Text at known coordinates so the probe can
+% assert on it. Page is 600x800bp; lines are 40bp apart starting at y=50.
+% Left block spans x 50..207, right block x 402..550.
+\documentclass[12pt]{article}
+\usepackage[papersize={600bp,800bp},margin=50bp]{geometry}
+\usepackage[T1]{fontenc}
+\pagestyle{empty}
+\setlength{\parindent}{0pt}
+\begin{document}
+\fontsize{20}{40}\selectfont
+ESQ1 ESQ1 ESQ1 \hfill DIR1 DIR1 DIR1\\
+ESQ2 ESQ2 ESQ2 \hfill DIR2 DIR2 DIR2\\
+ESQ3 ESQ3 ESQ3 \hfill DIR3 DIR3 DIR3\\
+ESQ4 ESQ4 ESQ4 \hfill DIR4 DIR4 DIR4\\
+ESQ5 ESQ5 ESQ5 \hfill DIR5 DIR5 DIR5\\
+\newpage
+PESQ1 PESQ1 \hfill PDIR1 PDIR1\\
+PESQ2 PESQ2 \hfill PDIR2 PDIR2\\
+PESQ3 PESQ3 \hfill PDIR3 PDIR3\\
+PESQ4 PESQ4 \hfill PDIR4 PDIR4\\
+PESQ5 PESQ5 \hfill PDIR5 PDIR5\\
+\end{document}
