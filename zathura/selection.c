@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: Zlib */
 
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -83,4 +84,35 @@ girara_list_t* zathura_selection_slice_range(const zathura_selection_t* selectio
   }
 
   return list;
+}
+
+int zathura_selection_nearest_page(const zathura_rectangle_t* bounds, unsigned int n_bounds, double x, double y,
+                                   double* local_x, double* local_y) {
+  if (bounds == NULL || local_x == NULL || local_y == NULL) {
+    return -1;
+  }
+
+  int best          = -1;
+  double best_dist2 = 0.0;
+  for (unsigned int i = 0; i < n_bounds; i++) {
+    const zathura_rectangle_t* r = &bounds[i];
+    if (r->x1 > r->x2) {
+      continue;
+    }
+
+    const double dx    = fmax(fmax(r->x1 - x, x - r->x2), 0.0);
+    const double dy    = fmax(fmax(r->y1 - y, y - r->y2), 0.0);
+    const double dist2 = dx * dx + dy * dy;
+    if (best == -1 || dist2 < best_dist2) {
+      best       = (int)i;
+      best_dist2 = dist2;
+    }
+  }
+
+  if (best != -1) {
+    const zathura_rectangle_t* r = &bounds[best];
+    *local_x                     = fmin(fmax(x, r->x1), r->x2) - r->x1;
+    *local_y                     = fmin(fmax(y, r->y1), r->y2) - r->y1;
+  }
+  return best;
 }

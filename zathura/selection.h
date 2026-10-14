@@ -66,4 +66,27 @@ typedef struct zathura_page_extent_s {
 girara_list_t* zathura_selection_slice_range(const zathura_selection_t* selection, const zathura_page_extent_t* extents,
                                              unsigned int n_extents);
 
+/**
+ * Find the page a point belongs to, given the bounds of each page in one
+ * common coordinate space (for instance the document widget's).
+ *
+ * A point inside a page picks that page. A point in the gap between pages, or
+ * outside all of them, picks the nearest page; on a tie the lower index wins.
+ * Either way the returned point is clamped to the page, so a drag that leaves
+ * the pages still yields a valid anchor.
+ *
+ * Entries with x1 > x2 are skipped, which lets the caller mark pages that have
+ * no widget yet or are hidden.
+ *
+ * @param bounds   array of page bounds, indexed by page
+ * @param n_bounds number of entries in @p bounds
+ * @param x        x of the point
+ * @param y        y of the point
+ * @param local_x  x relative to the picked page's top-left corner
+ * @param local_y  y relative to the picked page's top-left corner
+ * @return index of the picked page, or -1 when no entry is usable
+ */
+int zathura_selection_nearest_page(const zathura_rectangle_t* bounds, unsigned int n_bounds, double x, double y,
+                                   double* local_x, double* local_y);
+
 #endif
