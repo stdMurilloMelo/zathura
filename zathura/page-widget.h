@@ -91,6 +91,18 @@ void zathura_page_widget_abort_render_request(ZathuraPageWidget* widget);
 zathura_page_t* zathura_page_widget_get_page(ZathuraPageWidget* widget);
 
 /**
+ * Convert a point from widget coordinates to page coordinates, undoing the
+ * document rotation and scale. These are the coordinates the plugin expects.
+ *
+ * @param widget the widget
+ * @param x      x in widget coordinates
+ * @param y      y in widget coordinates
+ * @param page_x x in page coordinates
+ * @param page_y y in page coordinates
+ */
+void zathura_page_widget_to_page_point(ZathuraPageWidget* widget, double x, double y, double* page_x, double* page_y);
+
+/**
  * Set size request for the page widget
  *
  * @param widget the widget
