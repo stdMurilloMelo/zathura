@@ -997,6 +997,16 @@ static void rotate_point(zathura_t* zathura, unsigned int page, double orig_x, d
   }
 }
 
+void zathura_page_widget_to_page_point(ZathuraPageWidget* widget, double x, double y, double* page_x, double* page_y) {
+  g_return_if_fail(widget != NULL && page_x != NULL && page_y != NULL);
+  ZathuraPageWidgetPrivate* priv = zathura_page_widget_get_instance_private(widget);
+
+  const double scale = zathura_document_get_scale(zathura_page_get_document(priv->page));
+  rotate_point(priv->zathura, zathura_page_get_index(priv->page), x, y, page_x, page_y);
+  *page_x /= scale;
+  *page_y /= scale;
+}
+
 void zathura_page_widget_clear_selection(ZathuraPageWidget* widget) {
   g_return_if_fail(widget != NULL);
 
