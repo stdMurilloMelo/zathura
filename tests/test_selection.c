@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: Zlib */
 
+#include <string.h>
 #include "selection.h"
 
 /*
@@ -204,6 +205,62 @@ static void test_whole_document(void) {
   girara_list_free(list);
 }
 
+/* Two rows of two pages, 100x200 each, 10 apart: the layout of pages-per-row 2. */
+static const zathura_rectangle_t grid[] = {
+    {.x1 = 0, .y1 = 0, .x2 = 100, .y2 = 200},
+    {.x1 = 110, .y1 = 0, .x2 = 210, .y2 = 200},
+    {.x1 = 0, .y1 = 210, .x2 = 100, .y2 = 410},
+    {.x1 = 110, .y1 = 210, .x2 = 210, .y2 = 410},
+};
+
+static void test_nearest_inside(void) {
+  double x = -1, y = -1;
+  g_assert_cmpint(zathura_selection_nearest_page(grid, 4, 150, 300, &x, &y), ==, 3);
+  g_assert_cmpfloat(x, ==, 40);
+  g_assert_cmpfloat(y, ==, 90);
+}
+
+static void test_nearest_gap(void) {
+  double x = -1, y = -1;
+  /* between pages 0 and 2, closer to 2 */
+  g_assert_cmpint(zathura_selection_nearest_page(grid, 4, 50, 207, &x, &y), ==, 2);
+  g_assert_cmpfloat(x, ==, 50);
+  g_assert_cmpfloat(y, ==, 0);
+  /* between pages 0 and 1, closer to 0 */
+  g_assert_cmpint(zathura_selection_nearest_page(grid, 4, 103, 50, &x, &y), ==, 0);
+  g_assert_cmpfloat(x, ==, 100);
+}
+
+static void test_nearest_tie(void) {
+  double x = -1, y = -1;
+  /* dead centre of the gap: the lower index wins */
+  g_assert_cmpint(zathura_selection_nearest_page(grid, 4, 105, 205, &x, &y), ==, 0);
+}
+
+static void test_nearest_outside(void) {
+  double x = -1, y = -1;
+  /* below the last row, as during autoscroll */
+  g_assert_cmpint(zathura_selection_nearest_page(grid, 4, 180, 900, &x, &y), ==, 3);
+  g_assert_cmpfloat(x, ==, 70);
+  g_assert_cmpfloat(y, ==, 200);
+  /* left of everything and above */
+  g_assert_cmpint(zathura_selection_nearest_page(grid, 4, -50, -50, &x, &y), ==, 0);
+  g_assert_cmpfloat(x, ==, 0);
+  g_assert_cmpfloat(y, ==, 0);
+}
+
+static void test_nearest_skips_missing(void) {
+  zathura_rectangle_t bounds[4];
+  memcpy(bounds, grid, sizeof(grid));
+  bounds[3].x1 = 1;
+  bounds[3].x2 = 0; /* no widget yet */
+  double x = -1, y = -1;
+  g_assert_cmpint(zathura_selection_nearest_page(bounds, 4, 150, 300, &x, &y), ==, 2);
+  g_assert_cmpfloat(x, ==, 100);
+  g_assert_cmpint(zathura_selection_nearest_page(bounds, 0, 150, 300, &x, &y), ==, -1);
+  g_assert_cmpint(zathura_selection_nearest_page(NULL, 4, 150, 300, &x, &y), ==, -1);
+}
+
 int main(int argc, char* argv[]) {
   g_test_init(&argc, &argv, NULL);
   g_test_add_func("/selection/single_page", test_single_page);
@@ -220,5 +277,10 @@ int main(int argc, char* argv[]) {
   g_test_add_func("/selection/index_order", test_index_order);
   g_test_add_func("/selection/invalid_input", test_invalid_input);
   g_test_add_func("/selection/whole_document", test_whole_document);
+  g_test_add_func("/selection/nearest_inside", test_nearest_inside);
+  g_test_add_func("/selection/nearest_gap", test_nearest_gap);
+  g_test_add_func("/selection/nearest_tie", test_nearest_tie);
+  g_test_add_func("/selection/nearest_outside", test_nearest_outside);
+  g_test_add_func("/selection/nearest_skips_missing", test_nearest_skips_missing);
   return g_test_run();
 }
