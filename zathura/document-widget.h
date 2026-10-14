@@ -244,6 +244,22 @@ void zathura_document_widget_get_cell_size(ZathuraDocumentWidget* document, unsi
                                            unsigned int* height, unsigned int* width);
 
 /**
+ * Find the page under a point of the document widget and the point in that
+ * page's coordinates. A point between pages or outside the widget maps to the
+ * nearest page, clamped to its border, so a drag always has an anchor.
+ *
+ * @param document   ZathuraDocumentWidget
+ * @param x          x in document widget coordinates
+ * @param y          y in document widget coordinates
+ * @return page_index index of the page
+ * @return page_x    x in page coordinates
+ * @return page_y    y in page coordinates
+ * @return true if a page was found, false if no page widget is shown
+ */
+bool zathura_document_widget_page_at_point(ZathuraDocumentWidget* document, double x, double y,
+                                           unsigned int* page_index, double* page_x, double* page_y);
+
+/**
  * The position and size of a row in the document widget.
  * Valid after a call to zathura_document_widget_compute_layout.
  *

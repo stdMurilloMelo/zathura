@@ -11,6 +11,7 @@
 #include "page-widget.h"
 #include "page.h"
 #include "render.h"
+#include "selection.h"
 #include "utils.h"
 #include "zathura.h"
 
@@ -133,6 +134,9 @@ static void zathura_document_widget_class_init(ZathuraDocumentWidgetClass* class
                                               NULL, NULL, g_cclosure_marshal_generic, G_TYPE_NONE, 0);
 }
 
+static void cb_document_widget_drag_begin(GtkGestureDrag* gesture, double x, double y, gpointer data);
+static void cb_document_widget_drag_update(GtkGestureDrag* gesture, double offset_x, double offset_y, gpointer data);
+
 static void zathura_document_widget_init(ZathuraDocumentWidget* widget) {
   ZathuraDocumentWidgetPrivate* priv = zathura_document_widget_get_instance_private(widget);
 
@@ -158,6 +162,14 @@ static void zathura_document_widget_init(ZathuraDocumentWidget* widget) {
   gtk_widget_set_halign(priv->grid, GTK_ALIGN_CENTER);
   gtk_widget_set_valign(priv->grid, GTK_ALIGN_CENTER);
   gtk_widget_set_parent(priv->grid, GTK_WIDGET(widget));
+
+  /* a gesture on the document, not on each page, so a drag is not confined to the page it started on */
+  GtkGesture* drag = gtk_gesture_drag_new();
+  gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(drag), GDK_BUTTON_PRIMARY);
+  g_signal_connect(drag, "drag-begin", G_CALLBACK(cb_document_widget_drag_begin), widget);
+  g_signal_connect(drag, "drag-update", G_CALLBACK(cb_document_widget_drag_update), widget);
+  g_signal_connect(drag, "drag-end", G_CALLBACK(cb_document_widget_drag_update), widget);
+  gtk_widget_add_controller(GTK_WIDGET(widget), GTK_EVENT_CONTROLLER(drag));
 }
 
 GtkWidget* zathura_document_widget_new(zathura_t* zathura, zathura_document_t* zathura_document) {
@@ -1491,4 +1503,76 @@ void zathura_document_widget_set_adjust_mode(ZathuraDocumentWidget* document, za
 
   ZathuraDocumentWidgetPrivate* priv = zathura_document_widget_get_instance_private(document);
   priv->adjust_mode                  = mode;
+}
+
+bool zathura_document_widget_page_at_point(ZathuraDocumentWidget* document, double x, double y,
+                                           unsigned int* page_index, double* page_x, double* page_y) {
+  g_return_val_if_fail(document != NULL && page_index != NULL && page_x != NULL && page_y != NULL, false);
+
+  ZathuraDocumentWidgetPrivate* priv = zathura_document_widget_get_instance_private(document);
+  if (priv->document == NULL || priv->pages == NULL) {
+    return false;
+  }
+
+  /* common case: the pointer is over a page */
+  GtkWidget* picked = gtk_widget_pick(GTK_WIDGET(document), x, y, GTK_PICK_DEFAULT);
+  while (picked != NULL && picked != GTK_WIDGET(document) && ZATHURA_IS_PAGE_WIDGET(picked) == false) {
+    picked = gtk_widget_get_parent(picked);
+  }
+
+  GtkWidget* page_widget = NULL;
+  graphene_point_t local = GRAPHENE_POINT_INIT(0, 0);
+  if (picked != NULL && ZATHURA_IS_PAGE_WIDGET(picked) == true &&
+      gtk_widget_compute_point(GTK_WIDGET(document), picked, &GRAPHENE_POINT_INIT((float)x, (float)y), &local) ==
+          true) {
+    page_widget = picked;
+  } else {
+    /* between pages or outside the widget: take the nearest page that is shown */
+    /* ponytail: scans every page, O(n) per motion event; restrict to the visible rows if it shows up in profiles */
+    const unsigned int n_pages             = zathura_document_get_number_of_pages(priv->document);
+    g_autofree zathura_rectangle_t* bounds = g_new(zathura_rectangle_t, n_pages);
+    for (unsigned int i = 0; i < n_pages; i++) {
+      bounds[i]       = (zathura_rectangle_t){.x1 = 1, .x2 = 0};
+      GtkWidget* page = priv->pages[i];
+      graphene_rect_t rect;
+      if (page != NULL && gtk_widget_get_visible(page) == true &&
+          gtk_widget_compute_bounds(page, GTK_WIDGET(document), &rect) == true) {
+        bounds[i] = (zathura_rectangle_t){.x1 = rect.origin.x,
+                                          .y1 = rect.origin.y,
+                                          .x2 = rect.origin.x + rect.size.width,
+                                          .y2 = rect.origin.y + rect.size.height};
+      }
+    }
+
+    double local_x = 0, local_y = 0;
+    const int nearest = zathura_selection_nearest_page(bounds, n_pages, x, y, &local_x, &local_y);
+    if (nearest == -1) {
+      return false;
+    }
+    page_widget = priv->pages[nearest];
+    local       = GRAPHENE_POINT_INIT((float)local_x, (float)local_y);
+  }
+
+  ZathuraPageWidget* page = ZATHURA_PAGE_WIDGET(page_widget);
+  *page_index             = zathura_page_get_index(zathura_page_widget_get_page(page));
+  zathura_page_widget_to_page_point(page, local.x, local.y, page_x, page_y);
+  return true;
+}
+
+static void log_drag_point(ZathuraDocumentWidget* document, const char* what, double x, double y) {
+  unsigned int page = 0;
+  double page_x = 0, page_y = 0;
+  if (zathura_document_widget_page_at_point(document, x, y, &page, &page_x, &page_y) == true) {
+    girara_debug("drag %s: page %u (%.1f, %.1f)", what, page + 1, page_x, page_y);
+  }
+}
+
+static void cb_document_widget_drag_begin(GtkGestureDrag* UNUSED(gesture), double x, double y, gpointer data) {
+  log_drag_point(ZATHURA_DOCUMENT_WIDGET(data), "begin", x, y);
+}
+
+static void cb_document_widget_drag_update(GtkGestureDrag* gesture, double offset_x, double offset_y, gpointer data) {
+  double x = 0, y = 0;
+  gtk_gesture_drag_get_start_point(gesture, &x, &y);
+  log_drag_point(ZATHURA_DOCUMENT_WIDGET(data), "update", x + offset_x, y + offset_y);
 }
