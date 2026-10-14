@@ -46,6 +46,9 @@ typedef struct zathura_document_widget_private_s {
 
   GtkWidget* grid;
 
+  /* Selection */
+  zathura_selection_t selection;
+
   /* Scrolling */
   GtkAdjustment* hadjustment;
   GtkAdjustment* vadjustment;
@@ -122,6 +125,7 @@ static void zathura_document_widget_class_init(ZathuraDocumentWidgetClass* class
 
 static void cb_document_widget_drag_begin(GtkGestureDrag* gesture, double x, double y, gpointer data);
 static void cb_document_widget_drag_update(GtkGestureDrag* gesture, double offset_x, double offset_y, gpointer data);
+static void cb_document_widget_drag_end(GtkGestureDrag* gesture, double offset_x, double offset_y, gpointer data);
 
 static void zathura_document_widget_init(ZathuraDocumentWidget* widget) {
   ZathuraDocumentWidgetPrivate* priv = zathura_document_widget_get_instance_private(widget);
@@ -156,7 +160,7 @@ static void zathura_document_widget_init(ZathuraDocumentWidget* widget) {
   gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(drag), GDK_BUTTON_PRIMARY);
   g_signal_connect(drag, "drag-begin", G_CALLBACK(cb_document_widget_drag_begin), widget);
   g_signal_connect(drag, "drag-update", G_CALLBACK(cb_document_widget_drag_update), widget);
-  g_signal_connect(drag, "drag-end", G_CALLBACK(cb_document_widget_drag_update), widget);
+  g_signal_connect(drag, "drag-end", G_CALLBACK(cb_document_widget_drag_end), widget);
   gtk_widget_add_controller(GTK_WIDGET(widget), GTK_EVENT_CONTROLLER(drag));
 }
 
@@ -1386,20 +1390,75 @@ bool zathura_document_widget_page_at_point(ZathuraDocumentWidget* document, doub
   return true;
 }
 
-static void log_drag_point(ZathuraDocumentWidget* document, const char* what, double x, double y) {
-  unsigned int page = 0;
-  double page_x = 0, page_y = 0;
-  if (zathura_document_widget_page_at_point(document, x, y, &page, &page_x, &page_y) == true) {
-    girara_debug("drag %s: page %u (%.1f, %.1f)", what, page + 1, page_x, page_y);
+/* move an anchor to the page and point under (x, y); false when no page is shown */
+static bool anchor_at(ZathuraDocumentWidget* document, double x, double y, zathura_selection_anchor_t* anchor) {
+  if (zathura_document_widget_page_at_point(document, x, y, &anchor->page, &anchor->x, &anchor->y) == false) {
+    return false;
   }
+  girara_debug("drag: page %u (%.1f, %.1f)", anchor->page + 1, anchor->x, anchor->y);
+  return true;
+}
+
+static char* slice_text(const zathura_selection_slice_t* slice, void* data) {
+  zathura_page_t* page = zathura_document_get_page(data, slice->page);
+  return page != NULL ? zathura_page_get_text(page, slice->rectangle, NULL) : NULL;
+}
+
+/* the text of the whole interval, one plugin call per page in it */
+static char* selection_text(ZathuraDocumentWidget* document) {
+  ZathuraDocumentWidgetPrivate* priv = zathura_document_widget_get_instance_private(document);
+
+  /* only the pages in the interval are measured: reading a page's size loads it */
+  const unsigned int n_pages              = zathura_document_get_number_of_pages(priv->document);
+  const unsigned int first                = MIN(priv->selection.origin.page, priv->selection.cursor.page);
+  const unsigned int last                 = MAX(priv->selection.origin.page, priv->selection.cursor.page);
+  g_autofree zathura_page_extent_t* sizes = g_new0(zathura_page_extent_t, n_pages);
+  for (unsigned int i = first; i <= last && i < n_pages; i++) {
+    zathura_page_t* page = zathura_document_get_page(priv->document, i);
+    if (page != NULL) {
+      sizes[i].width  = zathura_page_get_width(page);
+      sizes[i].height = zathura_page_get_height(page);
+    }
+  }
+
+  g_autoptr(girara_list_t) slices = zathura_selection_slice_range(&priv->selection, sizes, n_pages);
+  return zathura_selection_collect_text(slices, slice_text, priv->document);
 }
 
 static void cb_document_widget_drag_begin(GtkGestureDrag* UNUSED(gesture), double x, double y, gpointer data) {
-  log_drag_point(ZATHURA_DOCUMENT_WIDGET(data), "begin", x, y);
+  ZathuraDocumentWidget* document    = ZATHURA_DOCUMENT_WIDGET(data);
+  ZathuraDocumentWidgetPrivate* priv = zathura_document_widget_get_instance_private(document);
+
+  priv->selection.active = anchor_at(document, x, y, &priv->selection.origin);
+  priv->selection.cursor = priv->selection.origin;
 }
 
 static void cb_document_widget_drag_update(GtkGestureDrag* gesture, double offset_x, double offset_y, gpointer data) {
+  ZathuraDocumentWidget* document    = ZATHURA_DOCUMENT_WIDGET(data);
+  ZathuraDocumentWidgetPrivate* priv = zathura_document_widget_get_instance_private(document);
+  if (priv->selection.active == false) {
+    return;
+  }
+
   double x = 0, y = 0;
   gtk_gesture_drag_get_start_point(gesture, &x, &y);
-  log_drag_point(ZATHURA_DOCUMENT_WIDGET(data), "update", x + offset_x, y + offset_y);
+  anchor_at(document, x + offset_x, y + offset_y, &priv->selection.cursor);
+}
+
+static void cb_document_widget_drag_end(GtkGestureDrag* gesture, double offset_x, double offset_y, gpointer data) {
+  ZathuraDocumentWidget* document    = ZATHURA_DOCUMENT_WIDGET(data);
+  ZathuraDocumentWidgetPrivate* priv = zathura_document_widget_get_instance_private(document);
+
+  cb_document_widget_drag_update(gesture, offset_x, offset_y, data);
+  if (priv->selection.active == false) {
+    return;
+  }
+  priv->selection.active = false;
+
+  /* ponytail: logged only; the copy to the clipboard is wired in E6 */
+  g_autofree char* text = selection_text(document);
+  if (text != NULL) {
+    g_autofree char* escaped = g_strescape(text, NULL);
+    girara_debug("drag text: \"%s\"", escaped);
+  }
 }
