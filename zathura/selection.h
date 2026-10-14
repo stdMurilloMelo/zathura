@@ -67,6 +67,30 @@ girara_list_t* zathura_selection_slice_range(const zathura_selection_t* selectio
                                              unsigned int n_extents);
 
 /**
+ * Extract the text of one slice. Returns a newly allocated string, freed with
+ * g_free, or NULL when the page has no text there.
+ */
+typedef char* (*zathura_selection_text_fn)(const zathura_selection_slice_t* slice, void* data);
+
+/**
+ * Join the text of every slice, in list order, into one string.
+ *
+ * Pieces are separated by a newline, as the plugin does not end a page's text
+ * with one. Slices that yield no text are skipped, so a page with no text
+ * layer does not leave a blank line behind.
+ *
+ * The text itself comes from @p get_text, which keeps this function free of
+ * plugins and documents and lets it be tested with a stub.
+ *
+ * @param slices   list of zathura_selection_slice_t*, as returned by
+ *                 zathura_selection_slice_range
+ * @param get_text extracts the text of one slice
+ * @param data     passed through to @p get_text
+ * @return the joined text, freed with g_free; NULL when no slice yields text
+ */
+char* zathura_selection_collect_text(girara_list_t* slices, zathura_selection_text_fn get_text, void* data);
+
+/**
  * Find the page a point belongs to, given the bounds of each page in one
  * common coordinate space (for instance the document widget's).
  *

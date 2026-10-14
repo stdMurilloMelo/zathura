@@ -261,6 +261,68 @@ static void test_nearest_skips_missing(void) {
   g_assert_cmpint(zathura_selection_nearest_page(NULL, 4, 150, 300, &x, &y), ==, -1);
 }
 
+/* Stub extractor: a page's text is "p<n>", page 2 has no text layer, and
+ * page 3 ends its text with a newline the way some plugins do. */
+static char* stub_text(const zathura_selection_slice_t* slice, void* data) {
+  unsigned int* calls = data;
+  (*calls)++;
+  switch (slice->page) {
+  case 2:
+    return NULL;
+  case 3:
+    return g_strdup("p3\n");
+  default:
+    return g_strdup_printf("p%u", slice->page);
+  }
+}
+
+static girara_list_t* slices_for(const unsigned int* pages, unsigned int n) {
+  girara_list_t* list = girara_list_new_with_free(g_free);
+  for (unsigned int i = 0; i < n; i++) {
+    zathura_selection_slice_t* slice = g_new0(zathura_selection_slice_t, 1);
+    slice->page                      = pages[i];
+    girara_list_append(list, slice);
+  }
+  return list;
+}
+
+static void test_collect_in_order(void) {
+  const unsigned int order[]      = {0, 1, 4};
+  g_autoptr(girara_list_t) slices = slices_for(order, 3);
+  unsigned int calls              = 0;
+  g_autofree char* text           = zathura_selection_collect_text(slices, stub_text, &calls);
+  g_assert_cmpstr(text, ==, "p0\np1\np4");
+  g_assert_cmpuint(calls, ==, 3);
+}
+
+static void test_collect_skips_empty(void) {
+  const unsigned int order[]      = {1, 2, 4};
+  g_autoptr(girara_list_t) slices = slices_for(order, 3);
+  unsigned int calls              = 0;
+  g_autofree char* text           = zathura_selection_collect_text(slices, stub_text, &calls);
+  g_assert_cmpstr(text, ==, "p1\np4");
+}
+
+static void test_collect_no_double_newline(void) {
+  const unsigned int order[]      = {3, 4};
+  g_autoptr(girara_list_t) slices = slices_for(order, 2);
+  unsigned int calls              = 0;
+  g_autofree char* text           = zathura_selection_collect_text(slices, stub_text, &calls);
+  g_assert_cmpstr(text, ==, "p3\np4");
+}
+
+static void test_collect_nothing(void) {
+  const unsigned int order[]      = {2};
+  g_autoptr(girara_list_t) slices = slices_for(order, 1);
+  unsigned int calls              = 0;
+  g_assert_null(zathura_selection_collect_text(slices, stub_text, &calls));
+
+  g_autoptr(girara_list_t) empty = slices_for(order, 0);
+  g_assert_null(zathura_selection_collect_text(empty, stub_text, &calls));
+  g_assert_null(zathura_selection_collect_text(NULL, stub_text, &calls));
+  g_assert_null(zathura_selection_collect_text(slices, NULL, &calls));
+}
+
 int main(int argc, char* argv[]) {
   g_test_init(&argc, &argv, NULL);
   g_test_add_func("/selection/single_page", test_single_page);
@@ -282,5 +344,9 @@ int main(int argc, char* argv[]) {
   g_test_add_func("/selection/nearest_tie", test_nearest_tie);
   g_test_add_func("/selection/nearest_outside", test_nearest_outside);
   g_test_add_func("/selection/nearest_skips_missing", test_nearest_skips_missing);
+  g_test_add_func("/selection/collect_in_order", test_collect_in_order);
+  g_test_add_func("/selection/collect_skips_empty", test_collect_skips_empty);
+  g_test_add_func("/selection/collect_no_double_newline", test_collect_no_double_newline);
+  g_test_add_func("/selection/collect_nothing", test_collect_nothing);
   return g_test_run();
 }
