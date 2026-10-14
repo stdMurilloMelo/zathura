@@ -86,6 +86,31 @@ girara_list_t* zathura_selection_slice_range(const zathura_selection_t* selectio
   return list;
 }
 
+char* zathura_selection_collect_text(girara_list_t* slices, zathura_selection_text_fn get_text, void* data) {
+  if (slices == NULL || get_text == NULL) {
+    return NULL;
+  }
+
+  GString* text = g_string_new(NULL);
+  for (size_t idx = 0; idx != girara_list_size(slices); ++idx) {
+    g_autofree char* piece = get_text(girara_list_nth(slices, idx), data);
+    if (piece == NULL || *piece == '\0') {
+      continue;
+    }
+
+    if (text->len > 0 && text->str[text->len - 1] != '\n') {
+      g_string_append_c(text, '\n');
+    }
+    g_string_append(text, piece);
+  }
+
+  if (text->len == 0) {
+    g_string_free(text, TRUE);
+    return NULL;
+  }
+  return g_string_free(text, FALSE);
+}
+
 int zathura_selection_nearest_page(const zathura_rectangle_t* bounds, unsigned int n_bounds, double x, double y,
                                    double* local_x, double* local_y) {
   if (bounds == NULL || local_x == NULL || local_y == NULL) {
