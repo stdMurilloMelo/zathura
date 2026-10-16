@@ -850,7 +850,6 @@ static bool document_widget_create(zathura_t* zathura, zathura_document_t* docum
   zathura_document_widget_refresh_layout(ZATHURA_DOCUMENT_WIDGET(widget));
   g_object_set(widget, "layout-mode", mode, NULL);
   g_signal_connect(widget, "page-widgets-loaded", G_CALLBACK(cb_document_widget_page_widgets_loaded), zathura);
-  g_signal_connect(widget, "text-selected", G_CALLBACK(cb_document_widget_text_selected), zathura);
 
   zathura->ui.document_widget = ZATHURA_DOCUMENT_WIDGET(widget);
   gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(zathura->ui.view), widget);

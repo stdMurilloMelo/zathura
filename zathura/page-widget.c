@@ -43,9 +43,8 @@ typedef struct zathura_page_widget_private_s {
   } search;
 
   struct {
-    girara_list_t* list;           /**< List of selection rectangles that should be drawn */
-    gboolean draw;                 /** Draw selection */
-    zathura_rectangle_t rectangle; /**< Rectangle the list was computed for */
+    girara_list_t* list; /**< List of selection rectangles that should be drawn */
+    gboolean draw;       /** Draw selection */
   } selection;
 
   struct {
@@ -115,6 +114,7 @@ enum properties_e {
 };
 
 enum {
+  TEXT_SELECTED,
   IMAGE_SELECTED,
   BUTTON_RELEASE,
   ENTER_LINK,
@@ -175,6 +175,9 @@ static void zathura_page_widget_class_init(ZathuraPageWidgetClass* class) {
                                                        G_PARAM_WRITABLE | G_PARAM_STATIC_STRINGS));
 
   /* add signals */
+  signals[TEXT_SELECTED] = g_signal_new("text-selected", ZATHURA_TYPE_PAGE_WIDGET, G_SIGNAL_RUN_LAST, 0, NULL, NULL,
+                                        g_cclosure_marshal_generic, G_TYPE_NONE, 1, G_TYPE_STRING);
+
   signals[IMAGE_SELECTED] = g_signal_new("image-selected", ZATHURA_TYPE_PAGE_WIDGET, G_SIGNAL_RUN_LAST, 0, NULL, NULL,
                                          g_cclosure_marshal_generic, G_TYPE_NONE, 1, G_TYPE_OBJECT);
 
@@ -1017,24 +1020,6 @@ void zathura_page_widget_clear_selection(ZathuraPageWidget* widget) {
   zathura_page_widget_redraw_canvas(widget);
 }
 
-void zathura_page_widget_set_selection(ZathuraPageWidget* widget, zathura_rectangle_t rectangle) {
-  g_return_if_fail(widget != NULL);
-  ZathuraPageWidgetPrivate* priv = zathura_page_widget_get_instance_private(widget);
-
-  /* pages in the middle of a drag keep the same rectangle; asking the plugin again would only cost time */
-  if (priv->selection.list != NULL && memcmp(&priv->selection.rectangle, &rectangle, sizeof(rectangle)) == 0) {
-    return;
-  }
-
-  if (priv->selection.list != NULL) {
-    girara_list_free(priv->selection.list);
-  }
-  priv->selection.rectangle = rectangle;
-  priv->selection.list      = zathura_page_get_selection(priv->page, rectangle, NULL);
-  priv->selection.draw      = priv->selection.list != NULL && girara_list_size(priv->selection.list) != 0;
-  zathura_page_widget_redraw_canvas(widget);
-}
-
 static void cb_zathura_page_widget_button_press_event(GtkGestureClick* gesture, gint n_press, gdouble bx, gdouble by,
                                                       gpointer data) {
   GtkWidget* widget              = GTK_WIDGET(data);
@@ -1123,18 +1108,24 @@ static void cb_zathura_page_widget_button_release_event(GtkGestureClick* gesture
   }
 
   if (priv->mouse.selection.x2 == -1 && priv->mouse.selection.y2 == -1) {
-    /* second press of a double click */
+    /* simple single click */
+    /* get links */
     if (priv->zathura->global.double_click_follow) {
       evaluate_link_at_mouse_position(page, oldx, oldy);
     }
-  } else if (priv->zathura->global.double_click_follow == false && priv->mouse.selection.x1 != -1) {
-    /* a single click, unless the pointer moved far enough to make it a drag */
-    int threshold = 8;
-    g_object_get(gtk_widget_get_settings(widget), "gtk-dnd-drag-threshold", &threshold, NULL);
+  } else if (priv->selection.list != NULL) {
+    zathura_rectangle_t tmp = priv->mouse.selection;
 
-    double x, y;
-    rotate_point(priv->zathura, zathura_page_get_index(priv->page), bx, by, &x, &y);
-    if (hypot(x - priv->mouse.selection.x1, y - priv->mouse.selection.y1) < threshold) {
+    tmp.x1 /= scale;
+    tmp.x2 /= scale;
+    tmp.y1 /= scale;
+    tmp.y2 /= scale;
+
+    g_autofree char* text = zathura_page_get_text(priv->page, tmp, NULL);
+    if (text != NULL && *text != '\0') {
+      /* emit text-selected signal */
+      g_signal_emit(page, signals[TEXT_SELECTED], 0, text);
+    } else if (priv->zathura->global.double_click_follow == false) {
       evaluate_link_at_mouse_position(page, oldx, oldy);
     }
   }
@@ -1179,7 +1170,7 @@ static void cb_zathura_page_widget_motion_notify(GtkEventControllerMotion* contr
   GdkModifierType evstate      = gtk_event_controller_get_current_event_state(GTK_EVENT_CONTROLLER(controller));
 
   if (evstate & GDK_BUTTON1_MASK) { /* holding left mouse button */
-    /* text selection is driven by the document widget, which sees the whole drag */
+    zathura_page_widget_clear_selection(page);
     if (evstate & priv->zathura->global.highlighter_modmask) {
       double x, y;
       rotate_point(priv->zathura, zathura_page_get_index(priv->page), ex, ey, &x, &y);
@@ -1191,6 +1182,22 @@ static void cb_zathura_page_widget_motion_notify(GtkEventControllerMotion* contr
 
       priv->highlighter.draw = true;
       zathura_page_widget_redraw_canvas(page);
+    } else {
+      /* calculate next selection */
+      rotate_point(priv->zathura, zathura_page_get_index(priv->page), ex, ey, &priv->mouse.selection.x2,
+                   &priv->mouse.selection.y2);
+
+      zathura_rectangle_t selection = priv->mouse.selection;
+      selection.x1 /= scale;
+      selection.y1 /= scale;
+      selection.x2 /= scale;
+      selection.y2 /= scale;
+
+      priv->selection.list = zathura_page_get_selection(priv->page, selection, NULL);
+      if (priv->selection.list != NULL && girara_list_size(priv->selection.list) != 0) {
+        priv->selection.draw = true;
+        zathura_page_widget_redraw_canvas(page);
+      }
     }
   } else {
     if (priv->links.retrieved == false) {
@@ -1229,12 +1236,8 @@ static void cb_zathura_page_widget_leave_notify(GtkEventControllerMotion* UNUSED
   bool keep_selection = false;
   girara_setting_get(priv->zathura->ui.session, "selection-keep-highlight", &keep_selection);
 
-  /* the pointer leaves the page it pressed on when a drag ends elsewhere; that must not drop the selection */
-  GtkWidget* document = gtk_widget_get_ancestor(GTK_WIDGET(page), ZATHURA_TYPE_DOCUMENT_WIDGET);
-  if (keep_selection == false && document != NULL &&
-      zathura_document_widget_selection_active(ZATHURA_DOCUMENT_WIDGET(document)) == false) {
+  if (keep_selection == false) {
     zathura_page_widget_clear_selection(page);
-    zathura_document_widget_clear_selection(ZATHURA_DOCUMENT_WIDGET(document));
   }
 
   if (priv->mouse.over_link == true) {

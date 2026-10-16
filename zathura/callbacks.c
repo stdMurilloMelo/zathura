@@ -609,8 +609,8 @@ bool cb_unknown_command(girara_session_t* session, const char* input) {
   return true;
 }
 
-void cb_document_widget_text_selected(ZathuraDocumentWidget* document, const char* text, void* data) {
-  g_return_if_fail(document != NULL);
+void cb_page_widget_text_selected(ZathuraPageWidget* page, const char* text, void* data) {
+  g_return_if_fail(page != NULL);
   g_return_if_fail(text != NULL);
   g_return_if_fail(data != NULL);
 
