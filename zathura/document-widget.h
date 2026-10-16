@@ -249,6 +249,21 @@ bool zathura_document_widget_page_at_point(ZathuraDocumentWidget* document, doub
                                            unsigned int* page_index, double* page_x, double* page_y);
 
 /**
+ * Take the text selection off every page.
+ *
+ * @param document ZathuraDocumentWidget
+ */
+void zathura_document_widget_clear_selection(ZathuraDocumentWidget* document);
+
+/**
+ * Whether a text selection drag is in progress.
+ *
+ * @param document ZathuraDocumentWidget
+ * @return true between the press that starts a selection and its release
+ */
+bool zathura_document_widget_selection_active(ZathuraDocumentWidget* document);
+
+/**
  * The position and size of a row in the document widget.
  * Valid after a call to zathura_document_widget_compute_layout.
  *
