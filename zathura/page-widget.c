@@ -1136,20 +1136,32 @@ static void cb_zathura_page_widget_button_release_event(GtkGestureClick* gesture
     if (priv->zathura->global.double_click_follow) {
       evaluate_link_at_mouse_position(page, oldx, oldy);
     }
-  } else if (priv->selection.list != NULL) {
-    zathura_rectangle_t tmp = priv->mouse.selection;
+  } else {
+    if (priv->selection.list != NULL) {
+      zathura_rectangle_t tmp = priv->mouse.selection;
 
-    tmp.x1 /= scale;
-    tmp.x2 /= scale;
-    tmp.y1 /= scale;
-    tmp.y2 /= scale;
+      tmp.x1 /= scale;
+      tmp.x2 /= scale;
+      tmp.y1 /= scale;
+      tmp.y2 /= scale;
 
-    g_autofree char* text = zathura_page_get_text(priv->page, tmp, NULL);
-    if (text != NULL && *text != '\0') {
-      /* emit text-selected signal */
-      g_signal_emit(page, signals[TEXT_SELECTED], 0, text);
-    } else if (priv->zathura->global.double_click_follow == false) {
-      evaluate_link_at_mouse_position(page, oldx, oldy);
+      g_autofree char* text = zathura_page_get_text(priv->page, tmp, NULL);
+      if (text != NULL && *text != '\0') {
+        /* emit text-selected signal */
+        g_signal_emit(page, signals[TEXT_SELECTED], 0, text);
+      }
+    }
+
+    /* a single click, unless the pointer moved far enough to make it a drag */
+    if (priv->zathura->global.double_click_follow == false && priv->mouse.selection.x1 != -1) {
+      int threshold = 8;
+      g_object_get(gtk_widget_get_settings(widget), "gtk-dnd-drag-threshold", &threshold, NULL);
+
+      double x, y;
+      rotate_point(priv->zathura, zathura_page_get_index(priv->page), bx, by, &x, &y);
+      if (hypot(x - priv->mouse.selection.x1, y - priv->mouse.selection.y1) < threshold) {
+        evaluate_link_at_mouse_position(page, oldx, oldy);
+      }
     }
   }
 
@@ -1193,8 +1205,8 @@ static void cb_zathura_page_widget_motion_notify(GtkEventControllerMotion* contr
   GdkModifierType evstate      = gtk_event_controller_get_current_event_state(GTK_EVENT_CONTROLLER(controller));
 
   if (evstate & GDK_BUTTON1_MASK) { /* holding left mouse button */
-    zathura_page_widget_clear_selection(page);
     if (evstate & priv->zathura->global.highlighter_modmask) {
+      zathura_page_widget_clear_selection(page);
       double x, y;
       rotate_point(priv->zathura, zathura_page_get_index(priv->page), ex, ey, &x, &y);
       priv->highlighter.bounds = next_selection_rectangle(priv->mouse.selection.x1, priv->mouse.selection.y1, x, y);
@@ -1206,21 +1218,9 @@ static void cb_zathura_page_widget_motion_notify(GtkEventControllerMotion* contr
       priv->highlighter.draw = true;
       zathura_page_widget_redraw_canvas(page);
     } else {
-      /* calculate next selection */
+      /* the document widget draws the selection; the release still copies from this end point */
       rotate_point(priv->zathura, zathura_page_get_index(priv->page), ex, ey, &priv->mouse.selection.x2,
                    &priv->mouse.selection.y2);
-
-      zathura_rectangle_t selection = priv->mouse.selection;
-      selection.x1 /= scale;
-      selection.y1 /= scale;
-      selection.x2 /= scale;
-      selection.y2 /= scale;
-
-      priv->selection.list = zathura_page_get_selection(priv->page, selection, NULL);
-      if (priv->selection.list != NULL && girara_list_size(priv->selection.list) != 0) {
-        priv->selection.draw = true;
-        zathura_page_widget_redraw_canvas(page);
-      }
     }
   } else {
     if (priv->links.retrieved == false) {
