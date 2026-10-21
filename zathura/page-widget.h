@@ -51,6 +51,16 @@ GtkWidget* zathura_page_widget_new(zathura_t* zathura, zathura_page_t* page);
  * @param keep_thumbnail don't destroy when surface is NULL
  */
 void zathura_page_widget_update_surface(ZathuraPageWidget* widget, cairo_surface_t* surface, bool keep_thumbnail);
+
+/**
+ * Show a text selection on the page. The plugin turns the rectangle into the
+ * rectangles to draw; it is read as a start and an end point in reading order.
+ *
+ * @param widget    the widget
+ * @param rectangle the selection, in page coordinates
+ */
+void zathura_page_widget_set_selection(ZathuraPageWidget* widget, zathura_rectangle_t rectangle);
+
 /**
  * Clear highlight of the selection/highlighter.
  * @param widget the widget

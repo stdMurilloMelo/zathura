@@ -1532,7 +1532,7 @@ bool zathura_document_widget_page_at_point(ZathuraDocumentWidget* document, doub
     page_widget = picked;
   } else {
     /* between pages or outside the widget: take the nearest page that is shown */
-    /* ponytail: scans every page, O(n) per motion event; restrict to the visible rows if it shows up in profiles */
+    /* scans every page, O(n) per motion event; maybe restrict to the visible rows later */
     const unsigned int n_pages             = zathura_document_get_number_of_pages(priv->document);
     g_autofree zathura_rectangle_t* bounds = g_new(zathura_rectangle_t, n_pages);
     for (unsigned int i = 0; i < n_pages; i++) {
@@ -1628,7 +1628,7 @@ static void cb_document_widget_drag_end(GtkGestureDrag* gesture, double offset_x
   }
   priv->selection.active = false;
 
-  /* ponytail: logged only; the copy to the clipboard is wired in E6 */
+  /* logged only; copy to clipboard later */
   g_autofree char* text = selection_text(document);
   if (text != NULL) {
     g_autofree char* escaped = g_strescape(text, NULL);

@@ -43,8 +43,9 @@ typedef struct zathura_page_widget_private_s {
   } search;
 
   struct {
-    girara_list_t* list; /**< List of selection rectangles that should be drawn */
-    gboolean draw;       /** Draw selection */
+    girara_list_t* list;           /**< List of selection rectangles that should be drawn */
+    gboolean draw;                 /** Draw selection */
+    zathura_rectangle_t rectangle; /**< Rectangle the list was computed for */
   } selection;
 
   struct {
@@ -1021,6 +1022,24 @@ void zathura_page_widget_clear_selection(ZathuraPageWidget* widget) {
   }
   priv->selection.draw   = false;
   priv->highlighter.draw = false;
+  zathura_page_widget_redraw_canvas(widget);
+}
+
+void zathura_page_widget_set_selection(ZathuraPageWidget* widget, zathura_rectangle_t rectangle) {
+  g_return_if_fail(widget != NULL);
+  ZathuraPageWidgetPrivate* priv = zathura_page_widget_get_instance_private(widget);
+
+  /* pages in the middle of a drag keep the same rectangle; asking the plugin again would only cost time */
+  if (priv->selection.list != NULL && memcmp(&priv->selection.rectangle, &rectangle, sizeof(rectangle)) == 0) {
+    return;
+  }
+
+  if (priv->selection.list != NULL) {
+    girara_list_free(priv->selection.list);
+  }
+  priv->selection.rectangle = rectangle;
+  priv->selection.list      = zathura_page_get_selection(priv->page, rectangle, NULL);
+  priv->selection.draw      = priv->selection.list != NULL && girara_list_size(priv->selection.list) != 0;
   zathura_page_widget_redraw_canvas(widget);
 }
 
