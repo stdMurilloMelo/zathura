@@ -1186,6 +1186,7 @@ static void cb_zathura_page_widget_motion_notify(GtkEventControllerMotion* contr
   GdkModifierType evstate      = gtk_event_controller_get_current_event_state(GTK_EVENT_CONTROLLER(controller));
 
   if (evstate & GDK_BUTTON1_MASK) { /* holding left mouse button */
+    /* text selection is driven by the document widget, which sees the whole drag */
     if (evstate & priv->zathura->global.highlighter_modmask) {
       zathura_page_widget_clear_selection(page);
       double x, y;
@@ -1198,10 +1199,6 @@ static void cb_zathura_page_widget_motion_notify(GtkEventControllerMotion* contr
 
       priv->highlighter.draw = true;
       zathura_page_widget_redraw_canvas(page);
-    } else {
-      /* the document widget draws the selection; the release still copies from this end point */
-      rotate_point(priv->zathura, zathura_page_get_index(priv->page), ex, ey, &priv->mouse.selection.x2,
-                   &priv->mouse.selection.y2);
     }
   } else {
     if (priv->links.retrieved == false) {
@@ -1240,8 +1237,12 @@ static void cb_zathura_page_widget_leave_notify(GtkEventControllerMotion* UNUSED
   bool keep_selection = false;
   girara_setting_get(priv->zathura->ui.session, "selection-keep-highlight", &keep_selection);
 
-  if (keep_selection == false) {
+  /* the pointer leaves the page it pressed on when a drag ends elsewhere; that must not drop the selection */
+  GtkWidget* document = gtk_widget_get_ancestor(GTK_WIDGET(page), ZATHURA_TYPE_DOCUMENT_WIDGET);
+  if (keep_selection == false && document != NULL &&
+      zathura_document_widget_selection_active(ZATHURA_DOCUMENT_WIDGET(document)) == false) {
     zathura_page_widget_clear_selection(page);
+    zathura_document_widget_clear_selection(ZATHURA_DOCUMENT_WIDGET(document));
   }
 
   if (priv->mouse.over_link == true) {
