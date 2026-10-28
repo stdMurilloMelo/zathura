@@ -1632,6 +1632,12 @@ void zathura_document_widget_clear_selection(ZathuraDocumentWidget* document) {
   priv->selection_shown = false;
 }
 
+bool zathura_document_widget_selection_active(ZathuraDocumentWidget* document) {
+  g_return_val_if_fail(document != NULL, false);
+  ZathuraDocumentWidgetPrivate* priv = zathura_document_widget_get_instance_private(document);
+  return priv->selection.active;
+}
+
 /* hand each page of the interval its slice, and take the highlight off the pages that left it */
 static void show_selection(ZathuraDocumentWidget* document, girara_list_t* slices) {
   ZathuraDocumentWidgetPrivate* priv = zathura_document_widget_get_instance_private(document);
