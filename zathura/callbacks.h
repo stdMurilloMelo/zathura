@@ -230,13 +230,13 @@ void cb_setting_recolor_keep_reverse_video_change(girara_session_t* session, con
 bool cb_unknown_command(girara_session_t* session, const char* input);
 
 /**
- * Emitted when text has been selected in the page widget
+ * Emitted when text has been selected in the document widget
  *
- * @param page page view widget
+ * @param document document widget
  * @param text selected text
  * @param data user data
  */
-void cb_page_widget_text_selected(ZathuraPageWidget* page, const char* text, void* data);
+void cb_document_widget_text_selected(ZathuraDocumentWidget* document, const char* text, void* data);
 
 void cb_page_widget_image_selected(ZathuraPageWidget* page, GdkTexture* texture, void* data);
 

@@ -91,6 +91,7 @@ static bool zathura_document_widget_page_is_visible(ZathuraDocumentWidget* docum
 
 enum signals_e {
   PAGE_WIDGETS_LOADED,
+  TEXT_SELECTED,
   LAST_SIGNAL,
 };
 
@@ -140,6 +141,9 @@ static void zathura_document_widget_class_init(ZathuraDocumentWidgetClass* class
 
   signals[PAGE_WIDGETS_LOADED] = g_signal_new("page-widgets-loaded", ZATHURA_TYPE_DOCUMENT_WIDGET, G_SIGNAL_RUN_LAST, 0,
                                               NULL, NULL, g_cclosure_marshal_generic, G_TYPE_NONE, 0);
+
+  signals[TEXT_SELECTED] = g_signal_new("text-selected", ZATHURA_TYPE_DOCUMENT_WIDGET, G_SIGNAL_RUN_LAST, 0, NULL, NULL,
+                                        g_cclosure_marshal_generic, G_TYPE_NONE, 1, G_TYPE_STRING);
 }
 
 static void cb_document_widget_drag_begin(GtkGestureDrag* gesture, double x, double y, gpointer data);
@@ -814,7 +818,6 @@ GtkWidget* zathura_document_widget_ensure_page(ZathuraDocumentWidget* document, 
     page_calc_height_width(priv->document, page, &page_height, &page_width, true);
     zathura_page_widget_set_size_request(ZATHURA_PAGE_WIDGET(page_widget), page_width, page_height);
 
-    g_signal_connect(G_OBJECT(page_widget), "text-selected", G_CALLBACK(cb_page_widget_text_selected), priv->zathura);
     g_signal_connect(G_OBJECT(page_widget), "image-selected", G_CALLBACK(cb_page_widget_image_selected), priv->zathura);
     g_signal_connect(G_OBJECT(page_widget), "enter-link", G_CALLBACK(cb_page_widget_link), (gpointer) true);
     g_signal_connect(G_OBJECT(page_widget), "leave-link", G_CALLBACK(cb_page_widget_link), (gpointer) false);
@@ -1721,11 +1724,9 @@ static void cb_document_widget_drag_end(GtkGestureDrag* gesture, double offset_x
     return;
   }
 
-  /* logged only; copy to clipboard later */
   g_autoptr(girara_list_t) slices = selection_slices(document);
   g_autofree char* text           = zathura_selection_collect_text(slices, slice_text, priv->document);
   if (text != NULL) {
-    g_autofree char* escaped = g_strescape(text, NULL);
-    girara_debug("drag text: \"%s\"", escaped);
+    g_signal_emit(document, signals[TEXT_SELECTED], 0, text);
   }
 }
