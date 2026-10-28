@@ -115,7 +115,6 @@ enum properties_e {
 };
 
 enum {
-  TEXT_SELECTED,
   IMAGE_SELECTED,
   BUTTON_RELEASE,
   ENTER_LINK,
@@ -176,9 +175,6 @@ static void zathura_page_widget_class_init(ZathuraPageWidgetClass* class) {
                                                        G_PARAM_WRITABLE | G_PARAM_STATIC_STRINGS));
 
   /* add signals */
-  signals[TEXT_SELECTED] = g_signal_new("text-selected", ZATHURA_TYPE_PAGE_WIDGET, G_SIGNAL_RUN_LAST, 0, NULL, NULL,
-                                        g_cclosure_marshal_generic, G_TYPE_NONE, 1, G_TYPE_STRING);
-
   signals[IMAGE_SELECTED] = g_signal_new("image-selected", ZATHURA_TYPE_PAGE_WIDGET, G_SIGNAL_RUN_LAST, 0, NULL, NULL,
                                          g_cclosure_marshal_generic, G_TYPE_NONE, 1, G_TYPE_OBJECT);
 
@@ -1137,21 +1133,6 @@ static void cb_zathura_page_widget_button_release_event(GtkGestureClick* gesture
       evaluate_link_at_mouse_position(page, oldx, oldy);
     }
   } else {
-    if (priv->selection.list != NULL) {
-      zathura_rectangle_t tmp = priv->mouse.selection;
-
-      tmp.x1 /= scale;
-      tmp.x2 /= scale;
-      tmp.y1 /= scale;
-      tmp.y2 /= scale;
-
-      g_autofree char* text = zathura_page_get_text(priv->page, tmp, NULL);
-      if (text != NULL && *text != '\0') {
-        /* emit text-selected signal */
-        g_signal_emit(page, signals[TEXT_SELECTED], 0, text);
-      }
-    }
-
     /* a single click, unless the pointer moved far enough to make it a drag */
     if (priv->zathura->global.double_click_follow == false && priv->mouse.selection.x1 != -1) {
       int threshold = 8;
