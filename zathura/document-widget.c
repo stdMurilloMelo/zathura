@@ -58,6 +58,9 @@ typedef struct zathura_document_widget_private_s {
   bool selection_shown; /**< pages first_shown..last_shown hold a highlight */
   unsigned int selection_first_shown;
   unsigned int selection_last_shown;
+  double pointer_x; /**< last drag position, in widget coordinates */
+  double pointer_y;
+  guint autoscroll_tick; /**< tick callback scrolling while the pointer is near an edge, or 0 */
 
   /* Scrolling */
   GtkAdjustment* hadjustment;
@@ -1701,6 +1704,33 @@ static void show_selection(ZathuraDocumentWidget* document, girara_list_t* slice
   priv->selection_last_shown  = last->page;
 }
 
+/* move the cursor to the page under the pointer and redraw the highlight */
+static void follow_pointer(ZathuraDocumentWidget* document) {
+  ZathuraDocumentWidgetPrivate* priv = zathura_document_widget_get_instance_private(document);
+  anchor_at(document, priv->pointer_x, priv->pointer_y, &priv->selection.cursor);
+
+  g_autoptr(girara_list_t) slices = selection_slices(document);
+  show_selection(document, slices);
+}
+
+/* while a drag holds the pointer near an edge, scroll and let the selection follow the content under it */
+static gboolean autoscroll(GtkWidget* widget, GdkFrameClock* UNUSED(clock), gpointer UNUSED(data)) {
+  ZathuraDocumentWidget* document    = ZATHURA_DOCUMENT_WIDGET(widget);
+  ZathuraDocumentWidgetPrivate* priv = zathura_document_widget_get_instance_private(document);
+
+  const double dx = zathura_selection_edge_speed(priv->pointer_x, gtk_widget_get_width(widget));
+  const double dy = zathura_selection_edge_speed(priv->pointer_y, gtk_widget_get_height(widget));
+  if (priv->selection.active == false || (dx == 0 && dy == 0)) {
+    priv->autoscroll_tick = 0;
+    return G_SOURCE_REMOVE;
+  }
+
+  gtk_adjustment_set_value(priv->hadjustment, gtk_adjustment_get_value(priv->hadjustment) + dx);
+  gtk_adjustment_set_value(priv->vadjustment, gtk_adjustment_get_value(priv->vadjustment) + dy);
+  follow_pointer(document);
+  return G_SOURCE_CONTINUE;
+}
+
 static void cb_document_widget_drag_begin(GtkGestureDrag* gesture, double x, double y, gpointer data) {
   ZathuraDocumentWidget* document    = ZATHURA_DOCUMENT_WIDGET(data);
   ZathuraDocumentWidgetPrivate* priv = zathura_document_widget_get_instance_private(document);
@@ -1747,10 +1777,16 @@ static void cb_document_widget_drag_update(GtkGestureDrag* gesture, double offse
 
   double x = 0, y = 0;
   gtk_gesture_drag_get_start_point(gesture, &x, &y);
-  anchor_at(document, x + offset_x, y + offset_y, &priv->selection.cursor);
+  priv->pointer_x = x + offset_x;
+  priv->pointer_y = y + offset_y;
+  follow_pointer(document);
 
-  g_autoptr(girara_list_t) slices = selection_slices(document);
-  show_selection(document, slices);
+  GtkWidget* widget = GTK_WIDGET(document);
+  if (priv->autoscroll_tick == 0 &&
+      (zathura_selection_edge_speed(priv->pointer_x, gtk_widget_get_width(widget)) != 0 ||
+       zathura_selection_edge_speed(priv->pointer_y, gtk_widget_get_height(widget)) != 0)) {
+    priv->autoscroll_tick = gtk_widget_add_tick_callback(widget, autoscroll, NULL, NULL);
+  }
 }
 
 static void cb_document_widget_drag_end(GtkGestureDrag* gesture, double offset_x, double offset_y, gpointer data) {
@@ -1758,6 +1794,10 @@ static void cb_document_widget_drag_end(GtkGestureDrag* gesture, double offset_x
   ZathuraDocumentWidgetPrivate* priv = zathura_document_widget_get_instance_private(document);
 
   cb_document_widget_drag_update(gesture, offset_x, offset_y, data);
+  if (priv->autoscroll_tick != 0) {
+    gtk_widget_remove_tick_callback(GTK_WIDGET(document), priv->autoscroll_tick);
+    priv->autoscroll_tick = 0;
+  }
   if (priv->selection.active == false) {
     return;
   }

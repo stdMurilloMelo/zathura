@@ -113,4 +113,21 @@ char* zathura_selection_collect_text(girara_list_t* slices, zathura_selection_te
 int zathura_selection_nearest_page(const zathura_rectangle_t* bounds, unsigned int n_bounds, double x, double y,
                                    double* local_x, double* local_y);
 
+/**
+ * How far to scroll per frame while a drag holds the pointer near an edge.
+ *
+ * Zero away from the edges. Inside the band of ZATHURA_SELECTION_EDGE pixels
+ * along an edge, or past it, the speed grows with how deep the pointer is,
+ * up to ZATHURA_SELECTION_EDGE_MAX_SPEED. The sign gives the direction:
+ * negative towards 0, positive towards @p size.
+ *
+ * @param pos  pointer position along one axis, in widget coordinates
+ * @param size widget size along that axis
+ * @return pixels to scroll this frame
+ */
+double zathura_selection_edge_speed(double pos, double size);
+
+#define ZATHURA_SELECTION_EDGE 32.0
+#define ZATHURA_SELECTION_EDGE_MAX_SPEED 40.0
+
 #endif

@@ -323,6 +323,20 @@ static void test_collect_nothing(void) {
   g_assert_null(zathura_selection_collect_text(slices, NULL, &calls));
 }
 
+static void test_edge_speed(void) {
+  /* away from the edges: no scrolling */
+  g_assert_cmpfloat(zathura_selection_edge_speed(500, 1000), ==, 0.0);
+  g_assert_cmpfloat(zathura_selection_edge_speed(ZATHURA_SELECTION_EDGE, 1000), ==, 0.0);
+  /* inside the band: slow, towards the near edge */
+  g_assert_cmpfloat(zathura_selection_edge_speed(0, 1000), ==, -ZATHURA_SELECTION_EDGE / 4);
+  g_assert_cmpfloat(zathura_selection_edge_speed(1000, 1000), ==, ZATHURA_SELECTION_EDGE / 4);
+  /* deeper is faster, past the widget too */
+  g_assert_cmpfloat(zathura_selection_edge_speed(1050, 1000), >, zathura_selection_edge_speed(1000, 1000));
+  /* but capped */
+  g_assert_cmpfloat(zathura_selection_edge_speed(-5000, 1000), ==, -ZATHURA_SELECTION_EDGE_MAX_SPEED);
+  g_assert_cmpfloat(zathura_selection_edge_speed(9000, 1000), ==, ZATHURA_SELECTION_EDGE_MAX_SPEED);
+}
+
 int main(int argc, char* argv[]) {
   g_test_init(&argc, &argv, NULL);
   g_test_add_func("/selection/single_page", test_single_page);
@@ -348,5 +362,6 @@ int main(int argc, char* argv[]) {
   g_test_add_func("/selection/collect_skips_empty", test_collect_skips_empty);
   g_test_add_func("/selection/collect_no_double_newline", test_collect_no_double_newline);
   g_test_add_func("/selection/collect_nothing", test_collect_nothing);
+  g_test_add_func("/selection/edge_speed", test_edge_speed);
   return g_test_run();
 }

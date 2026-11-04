@@ -111,6 +111,18 @@ char* zathura_selection_collect_text(girara_list_t* slices, zathura_selection_te
   return g_string_free(text, FALSE);
 }
 
+double zathura_selection_edge_speed(double pos, double size) {
+  double depth = 0.0;
+  if (pos < ZATHURA_SELECTION_EDGE) {
+    depth = pos - ZATHURA_SELECTION_EDGE;
+  } else if (pos > size - ZATHURA_SELECTION_EDGE) {
+    depth = pos - (size - ZATHURA_SELECTION_EDGE);
+  }
+
+  /* a quarter of the depth per frame: gentle at the border, fast once the pointer leaves the widget */
+  return fmax(fmin(depth / 4.0, ZATHURA_SELECTION_EDGE_MAX_SPEED), -ZATHURA_SELECTION_EDGE_MAX_SPEED);
+}
+
 int zathura_selection_nearest_page(const zathura_rectangle_t* bounds, unsigned int n_bounds, double x, double y,
                                    double* local_x, double* local_y) {
   if (bounds == NULL || local_x == NULL || local_y == NULL) {
