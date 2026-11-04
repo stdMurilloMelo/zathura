@@ -1582,8 +1582,7 @@ bool zathura_document_widget_page_at_point(ZathuraDocumentWidget* document, doub
                                                  &local) == true) {
     page_widget = picked;
   } else {
-    /* between pages or outside the widget: take the nearest page that is shown */
-    /* scans every page, O(n) per motion event; maybe restrict to the visible rows later */
+    /* between pages or outside the widget: take the nearest page that is shown; this visits every page */
     const unsigned int n_pages             = zathura_document_get_number_of_pages(priv->document);
     g_autofree zathura_rectangle_t* bounds = g_new(zathura_rectangle_t, n_pages);
     for (unsigned int i = 0; i < n_pages; i++) {
@@ -1616,11 +1615,7 @@ bool zathura_document_widget_page_at_point(ZathuraDocumentWidget* document, doub
 
 /* move an anchor to the page and point under (x, y); false when no page is shown */
 static bool anchor_at(ZathuraDocumentWidget* document, double x, double y, zathura_selection_anchor_t* anchor) {
-  if (zathura_document_widget_page_at_point(document, x, y, &anchor->page, &anchor->x, &anchor->y) == false) {
-    return false;
-  }
-  girara_debug("drag: page %u (%.1f, %.1f)", anchor->page + 1, anchor->x, anchor->y);
-  return true;
+  return zathura_document_widget_page_at_point(document, x, y, &anchor->page, &anchor->x, &anchor->y);
 }
 
 static char* slice_text(const zathura_selection_slice_t* slice, void* data) {
