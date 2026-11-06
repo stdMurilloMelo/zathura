@@ -127,7 +127,7 @@ int zathura_selection_nearest_page(const zathura_rectangle_t* bounds, unsigned i
  */
 double zathura_selection_edge_speed(double pos, double size);
 
-#define ZATHURA_SELECTION_EDGE 32.0
+#define ZATHURA_SELECTION_EDGE 48.0
 #define ZATHURA_SELECTION_EDGE_MAX_SPEED 40.0
 
 #endif
